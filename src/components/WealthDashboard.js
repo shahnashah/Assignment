@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Filter,
   MapPin,
@@ -26,7 +26,8 @@ import {
   XCircle,
   Plus,
   Menu,
-  X
+  X,
+  FileDown
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -45,6 +46,8 @@ import {
   ComposedChart
 } from 'recharts';
 
+import { generateDashboardPDF, prepareDashboardData } from '../utils/pdfGenerator';
+
 const WealthDashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
@@ -52,6 +55,12 @@ const WealthDashboard = () => {
   const [activeFilter, setActiveFilter] = useState('3 Days');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  
+  // Refs for chart components
+  const clientsChartRef = useRef(null);
+  const sipChartRef = useRef(null);
+  const monthlyMisChartRef = useRef(null);
 
   // Sample data for charts
   const sipData = [
@@ -95,6 +104,28 @@ const WealthDashboard = () => {
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
+  };
+  
+  const handleDownloadPDF = async () => {
+    setGeneratingPdf(true);
+    try {
+      // Prepare dashboard data
+      const dashboardData = prepareDashboardData(sipData, monthlyMisData, clientsData);
+      
+      // Prepare chart refs
+      const chartRefs = {
+        'Clients Chart': clientsChartRef,
+        'SIP Business Chart': sipChartRef,
+        'Monthly MIS Chart': monthlyMisChartRef
+      };
+      
+      // Generate PDF with darkMode parameter
+      await generateDashboardPDF(dashboardData, chartRefs, darkMode);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   if (loading) {
@@ -143,6 +174,19 @@ const WealthDashboard = () => {
 
         {/* Right Side Icons */}
         <div className="flex items-center space-x-2 sm:space-x-4">
+          {/* PDF Download Button */}
+          <button 
+            onClick={handleDownloadPDF}
+            disabled={generatingPdf}
+            className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-colors duration-200 ${
+              darkMode 
+                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                : 'bg-red-50 hover:bg-red-100 text-red-600'
+            } ${generatingPdf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            <FileDown className="w-4 h-4" />
+            <span className="text-xs hidden sm:inline">{generatingPdf ? 'Generating...' : 'Download PDF'}</span>
+          </button>
           {/* Hide some icons on small screens */}
           <div className="hidden md:flex items-center space-x-4">
             <Filter className={`w-5 h-5 cursor-pointer transition-colors duration-300 ${
@@ -246,7 +290,7 @@ const WealthDashboard = () => {
                   <span>+0.77% MoM</span>
                 </div>
               </div>
-              <button className="text-red-500 border border-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 transition-colors duration-200 self-start">
+              <button style={{ color: '#DC2626', borderColor: '#DC2626' }} className="border px-3 py-1 rounded text-xs transition-colors duration-200 self-start" onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                 View Report
               </button>
             </div>
@@ -270,7 +314,7 @@ const WealthDashboard = () => {
                   <span>+0% MoM</span>
                 </div>
               </div>
-              <button className="text-red-500 border border-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 transition-colors duration-200 self-start">
+              <button style={{ color: '#DC2626', borderColor: '#DC2626' }} className="border px-3 py-1 rounded text-xs transition-colors duration-200 self-start" onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                 View Report
               </button>
             </div>
@@ -309,10 +353,10 @@ const WealthDashboard = () => {
               value: 0, 
               amount: '0.00 INR', 
               icon: () => (
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#FEE2E2' }}>
                   <div className="relative">
-                    <div className="w-3 h-2 bg-red-500 rounded-sm mb-1"></div>
-                    <div className="w-1 h-2 bg-red-500 rounded-full mx-auto"></div>
+                    <div className="w-3 h-2 rounded-sm mb-1" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-1 h-2 rounded-full mx-auto" style={{ backgroundColor: '#DC2626' }}></div>
                   </div>
                 </div>
               )
@@ -322,9 +366,9 @@ const WealthDashboard = () => {
               value: 0, 
               amount: '0.00 INR', 
               icon: () => (
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
-                  <div className="w-4 h-3 border-2 border-red-500 rounded-sm relative">
-                    <div className="w-2 h-1 bg-red-500 absolute -top-1 left-1"></div>
+                <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#FEE2E2' }}>
+                  <div className="w-4 h-3 rounded-sm relative" style={{ border: '2px solid #DC2626' }}>
+                    <div className="w-2 h-1 absolute -top-1 left-1" style={{ backgroundColor: '#DC2626' }}></div>
                   </div>
                 </div>
               )
@@ -334,11 +378,11 @@ const WealthDashboard = () => {
               value: 0, 
               amount: '0.00 INR', 
               icon: () => (
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#FEE2E2' }}>
                   <div className="relative">
-                    <div className="w-3 h-2 bg-red-500 rounded-sm mb-1"></div>
-                    <div className="w-1 h-2 bg-red-500 rounded-full mx-auto"></div>
-                    <div className="w-2 h-1 bg-red-500 rounded absolute -top-1 right-0"></div>
+                    <div className="w-3 h-2 rounded-sm mb-1" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-1 h-2 rounded-full mx-auto" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-2 h-1 rounded absolute -top-1 right-0" style={{ backgroundColor: '#DC2626' }}></div>
                   </div>
                 </div>
               )
@@ -348,12 +392,12 @@ const WealthDashboard = () => {
               value: 0, 
               amount: '0.00 INR', 
               icon: () => (
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#FEE2E2' }}>
                   <div className="relative w-4 h-4">
-                    <div className="w-4 h-4 border-2 border-red-500 rounded-full relative">
+                    <div className="w-4 h-4 rounded-full relative" style={{ border: '2px solid #DC2626' }}>
                       <div className="absolute inset-1 flex items-center justify-center">
-                        <div className="w-2 h-0.5 bg-red-500 transform rotate-45"></div>
-                        <div className="w-2 h-0.5 bg-red-500 transform -rotate-45 absolute"></div>
+                        <div className="w-2 h-0.5 transform rotate-45" style={{ backgroundColor: '#DC2626' }}></div>
+                        <div className="w-2 h-0.5 transform -rotate-45 absolute" style={{ backgroundColor: '#DC2626' }}></div>
                       </div>
                     </div>
                   </div>
@@ -365,14 +409,14 @@ const WealthDashboard = () => {
               value: 0, 
               amount: '0.00 INR', 
               icon: () => (
-                <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: '#FEE2E2' }}>
                   <div className="relative w-5 h-4 flex items-end justify-center space-x-0.5">
-                    <div className="w-0.5 h-1 bg-red-500"></div>
-                    <div className="w-0.5 h-2 bg-red-500"></div>
-                    <div className="w-0.5 h-3 bg-red-500"></div>
-                    <div className="w-0.5 h-4 bg-red-500"></div>
+                    <div className="w-0.5 h-1" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-0.5 h-2" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-0.5 h-3" style={{ backgroundColor: '#DC2626' }}></div>
+                    <div className="w-0.5 h-4" style={{ backgroundColor: '#DC2626' }}></div>
                     <div className="absolute -top-1 right-0">
-                      <div className="w-1 h-1 border-t-2 border-r-2 border-red-500 transform rotate-45"></div>
+                      <div className="w-1 h-1 transform rotate-45" style={{ borderTop: '2px solid #DC2626', borderRight: '2px solid #DC2626' }}></div>
                     </div>
                   </div>
                 </div>
@@ -405,9 +449,11 @@ const WealthDashboard = () => {
         {/* Charts Row - Responsive Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
           {/* Clients Pie Chart */}
-          <div className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 ${
-            darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-          }`}>
+          <div 
+            ref={clientsChartRef}
+            className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 ${
+              darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+            }`}>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4">
               <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-0">CLIENTS</h3>
               <button className="text-red-500 border border-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 transition-colors duration-200 self-start">
@@ -417,18 +463,18 @@ const WealthDashboard = () => {
             <div className="relative h-48 sm:h-64">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="relative">
-                  <div className="w-32 sm:w-48 h-32 sm:h-48 bg-red-500 rounded-full flex items-center justify-center relative">
+                  <div className="w-32 sm:w-48 h-32 sm:h-48 rounded-full flex items-center justify-center relative" style={{ backgroundColor: '#DC2626' }}>
                     <div className="text-white text-center">
                       <div className="text-2xl sm:text-4xl font-bold">3824</div>
                     </div>
                     
-                    <div className="absolute -top-2 sm:-top-4 -right-2 sm:-right-4 w-12 sm:w-20 h-12 sm:h-20 bg-orange-500 rounded-full flex items-center justify-center">
+                    <div className="absolute -top-2 sm:-top-4 -right-2 sm:-right-4 w-12 sm:w-20 h-12 sm:h-20 rounded-full flex items-center justify-center" style={{ backgroundColor: '#F59E0B' }}>
                       <span className="text-white font-bold text-sm sm:text-lg">60</span>
                     </div>
                     
                     <div className="absolute -bottom-1 sm:-bottom-2 left-4 sm:left-8 text-white font-bold text-base sm:text-xl">541</div>
                     
-                    <div className="absolute -bottom-3 sm:-bottom-6 -left-3 sm:-left-6 w-8 sm:w-12 h-8 sm:h-12 bg-green-600 rounded-full flex items-center justify-center">
+                    <div className="absolute -bottom-3 sm:-bottom-6 -left-3 sm:-left-6 w-8 sm:w-12 h-8 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: '#059669' }}>
                       <span className="text-white font-bold text-sm">2</span>
                     </div>
                   </div>
@@ -438,28 +484,30 @@ const WealthDashboard = () => {
             
             <div className="flex flex-wrap justify-center gap-3 sm:gap-6 mt-4">
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F59E0B' }}></div>
                 <span className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Online</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#059669' }}></div>
                 <span className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>New</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#DC2626' }}></div>
                 <span className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Active</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-red-700 rounded-full"></div>
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#B91C1C' }}></div>
                 <span className={`text-xs sm:text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>InActive</span>
               </div>
             </div>
           </div>
 
           {/* SIP Business Chart */}
-          <div className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 ${
-            darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-          }`}>
+          <div 
+            ref={sipChartRef}
+            className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 ${
+              darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+            }`}>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4">
               <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-0">SIP BUSINESS CHART</h3>
               <button className="text-red-500 border border-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 transition-colors duration-200 self-start">
@@ -488,9 +536,11 @@ const WealthDashboard = () => {
           </div>
 
           {/* Monthly MIS */}
-          <div className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 lg:col-span-2 xl:col-span-1 ${
-            darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
-          }`}>
+          <div 
+            ref={monthlyMisChartRef}
+            className={`p-4 sm:p-6 rounded-lg shadow-sm transition-colors duration-300 lg:col-span-2 xl:col-span-1 ${
+              darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'
+            }`}>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4">
               <h3 className="text-base sm:text-lg font-semibold mb-2 sm:mb-0">MONTHLY MIS</h3>
               <button className="text-red-500 border border-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 transition-colors duration-200 self-start">
@@ -510,9 +560,9 @@ const WealthDashboard = () => {
                       color: darkMode ? '#ffffff' : '#000000'
                     }} 
                   />
-                  <Area type="monotone" dataKey="series1" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="series2" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="series3" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="series1" stackId="1" stroke="rgb(239, 68, 68)" fill="rgb(239, 68, 68)" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="series2" stackId="1" stroke="rgb(34, 197, 94)" fill="rgb(34, 197, 94)" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="series3" stackId="1" stroke="rgb(59, 130, 246)" fill="rgb(59, 130, 246)" fillOpacity={0.6} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
