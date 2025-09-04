@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "export": "next build",
+    "mobile:sync": "npm run export && npx cap sync",
+    "mobile:android": "npm run mobile:sync && npx cap open android",
+    "mobile:ios": "npm run mobile:sync && npx cap open ios",
     "cap:build": "npm run export && npx cap sync",
     "cap:android": "npm run cap:build && npx cap run android",
     "cap:ios": "npm run cap:build && npx cap run ios"
