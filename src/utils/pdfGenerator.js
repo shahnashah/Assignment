@@ -188,11 +188,12 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 /**
  * Generates a PDF with dashboard statistics and charts
  * @param {Object} dashboardData - Data from the dashboard
- * @param {Object} chartRefs - References to chart components (not used in this approach)
+ * @param {Object} chartRefs - References to chart components
  * @param {boolean} darkMode - Whether dark mode is enabled
  */
 export const generateDashboardPDF = async (dashboardData, chartRefs, darkMode = false) => {
@@ -282,151 +283,236 @@ export const generateDashboardPDF = async (dashboardData, chartRefs, darkMode = 
     styles: { halign: 'center' },
   });
   
-  // Add charts section
-  let yPosition = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : transactionTableHeight + 40) + 15;
+  // Add charts section - Start on new page for better layout
+  pdf.addPage();
+  let yPosition = 20;
   
-  // Check if we need to add a new page for charts
-  if (yPosition > pageHeight - 120) {
+  pdf.setFontSize(16);
+  pdf.setTextColor(0, 0, 0);
+  pdf.text('Dashboard Charts', 14, yPosition);
+  yPosition += 15;
+  
+  // Draw CLIENTS Chart
+  if (yPosition > pageHeight - 100) {
     pdf.addPage();
     yPosition = 20;
   }
   
-  pdf.setFontSize(14);
-  pdf.text('Charts', 14, yPosition);
-  yPosition += 10;
+  pdf.setFontSize(12);
+  pdf.setTextColor(0, 0, 0);
+  pdf.text('CLIENTS', 14, yPosition);
+  yPosition += 15;
   
-  // Draw Client Pie Chart using native PDF drawing
+  // Draw donut chart manually
+  const centerX = pageWidth / 2;
+  const centerY = yPosition + 40;
+  const outerRadius = 30;
+  const innerRadius = 18;
+  
+  // Client data
+  const clientChartData = [
+    { name: 'Active', value: dashboardData.clients.active, color: [220, 38, 38] },
+    { name: 'InActive', value: dashboardData.clients.inactive, color: [185, 28, 28] },
+    { name: 'New', value: dashboardData.clients.new, color: [5, 150, 105] },
+    { name: 'Online', value: dashboardData.clients.online, color: [245, 158, 11] }
+  ];
+  
+  const total = clientChartData.reduce((sum, item) => sum + item.value, 0);
+  let currentAngle = -Math.PI / 2; // Start from top
+  
+  // Draw donut slices
+  clientChartData.forEach((item) => {
+    if (item.value > 0) {
+      const sliceAngle = (item.value / total) * 2 * Math.PI;
+      
+      // Draw outer arc
+      pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+      
+      // Create multiple triangles to approximate the arc
+      const segments = Math.max(8, Math.floor(sliceAngle * 20));
+      for (let i = 0; i < segments; i++) {
+        const angle1 = currentAngle + (sliceAngle * i) / segments;
+        const angle2 = currentAngle + (sliceAngle * (i + 1)) / segments;
+        
+        const x1 = centerX + outerRadius * Math.cos(angle1);
+        const y1 = centerY + outerRadius * Math.sin(angle1);
+        const x2 = centerX + outerRadius * Math.cos(angle2);
+        const y2 = centerY + outerRadius * Math.sin(angle2);
+        const x3 = centerX + innerRadius * Math.cos(angle2);
+        const y3 = centerY + innerRadius * Math.sin(angle2);
+        const x4 = centerX + innerRadius * Math.cos(angle1);
+        const y4 = centerY + innerRadius * Math.sin(angle1);
+        
+        // Draw quad as two triangles
+        pdf.triangle(x1, y1, x2, y2, x3, y3, 'F');
+        pdf.triangle(x1, y1, x3, y3, x4, y4, 'F');
+      }
+      
+      currentAngle += sliceAngle;
+    }
+  });
+  
+  // Add center text
+  pdf.setFontSize(16);
+  pdf.setTextColor(0, 0, 0);
+  pdf.text(total.toString(), centerX, centerY + 3, { align: 'center' });
+  
+  // Add legend
+  let legendY = centerY + outerRadius + 20;
+  clientChartData.forEach((item, index) => {
+    const legendX = 14 + (index % 2) * 90;
+    if (index % 2 === 0 && index > 0) {
+      legendY += 10;
+    }
+    
+    // Draw color box
+    pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+    pdf.rect(legendX, legendY - 2, 4, 4, 'F');
+    
+    // Add text
+    pdf.setFontSize(9);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(`${item.name}: ${item.value}`, legendX + 8, legendY + 1);
+  });
+  
+  yPosition = legendY + 25;
+  
+  // Draw SIP Business Chart
   if (yPosition > pageHeight - 80) {
     pdf.addPage();
     yPosition = 20;
   }
   
   pdf.setFontSize(12);
-  pdf.text('Client Distribution', 14, yPosition);
-  yPosition += 10;
+  pdf.setTextColor(0, 0, 0);
+  pdf.text('SIP BUSINESS CHART', 14, yPosition);
+  yPosition += 15;
   
-  // Draw pie chart manually
-  const centerX = pageWidth / 2;
-  const centerY = yPosition + 30;
-  const radius = 25;
+  // Chart dimensions
+  const chartX = 20;
+  const chartY = yPosition;
+  const chartWidth = pageWidth - 40;
+  const chartHeight = 60;
   
-  // Client data with colors (RGB values to avoid oklch issues)
-  const clientChartData = [
-    { name: 'Active', value: dashboardData.clients.active, color: [220, 38, 38] },
-    { name: 'Inactive', value: dashboardData.clients.inactive, color: [185, 28, 28] },
-    { name: 'New', value: dashboardData.clients.new, color: [5, 150, 105] },
-    { name: 'Online', value: dashboardData.clients.online, color: [245, 158, 11] }
-  ];
+  // Draw grid
+  pdf.setDrawColor(200, 200, 200);
+  pdf.setLineWidth(0.1);
+  for (let i = 0; i <= 4; i++) {
+    const y = chartY + (chartHeight / 4) * i;
+    pdf.line(chartX, y, chartX + chartWidth, y);
+  }
+  for (let i = 0; i <= dashboardData.sipData.length; i++) {
+    const x = chartX + (chartWidth / dashboardData.sipData.length) * i;
+    pdf.line(x, chartY, x, chartY + chartHeight);
+  }
   
-  const total = clientChartData.reduce((sum, item) => sum + item.value, 0);
-  let currentAngle = 0;
+  // Find max values for scaling
+  const maxAmount = Math.max(...dashboardData.sipData.map(d => d.amount));
+  const maxTarget = Math.max(...dashboardData.sipData.map(d => d.target));
+  const maxValue = Math.max(maxAmount, maxTarget / 50);
   
-  // Draw pie slices
-  clientChartData.forEach((item) => {
-    if (item.value > 0) {
-      const sliceAngle = (item.value / total) * 2 * Math.PI;
-      
-      pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
-      
-      // Create path for pie slice
-      const startAngle = currentAngle;
-      const endAngle = currentAngle + sliceAngle;
-      
-      // Draw slice (simplified approach)
-      const x1 = centerX + radius * Math.cos(startAngle);
-      const y1 = centerY + radius * Math.sin(startAngle);
-      const x2 = centerX + radius * Math.cos(endAngle);
-      const y2 = centerY + radius * Math.sin(endAngle);
-      
-      // For simplicity, draw as a triangle from center
-      pdf.triangle(centerX, centerY, x1, y1, x2, y2, 'F');
-      
-      currentAngle += sliceAngle;
-    }
-  });
-  
-  // Add legend
-  let legendY = centerY + radius + 15;
-  clientChartData.forEach((item, index) => {
-    const legendX = 14 + (index % 2) * 90;
-    if (index % 2 === 0 && index > 0) {
-      legendY += 8;
-    }
+  // Draw bars
+  dashboardData.sipData.forEach((item, index) => {
+    const barWidth = (chartWidth / dashboardData.sipData.length) * 0.6;
+    const barX = chartX + (chartWidth / dashboardData.sipData.length) * index + (chartWidth / dashboardData.sipData.length - barWidth) / 2;
+    const barHeight = (item.amount / maxValue) * chartHeight;
+    const barY = chartY + chartHeight - barHeight;
     
-    // Draw color box
-    pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
-    pdf.rect(legendX, legendY - 2, 3, 3, 'F');
+    pdf.setFillColor(59, 130, 246); // Blue color
+    pdf.rect(barX, barY, barWidth, barHeight, 'F');
     
-    // Add text
-    pdf.setFontSize(9);
+    // Add month label
+    pdf.setFontSize(8);
     pdf.setTextColor(0, 0, 0);
-    pdf.text(`${item.name}: ${item.value}`, legendX + 6, legendY);
+    pdf.text(item.month, barX + barWidth / 2, chartY + chartHeight + 8, { align: 'center' });
   });
   
-  yPosition = legendY + 20;
+  // Draw line for targets
+  pdf.setDrawColor(239, 68, 68); // Red color
+  pdf.setLineWidth(1);
+  let prevX, prevY;
   
-  // Add SIP Business Chart data as table
-  if (yPosition > pageHeight - 60) {
+  dashboardData.sipData.forEach((item, index) => {
+    const pointX = chartX + (chartWidth / dashboardData.sipData.length) * index + (chartWidth / dashboardData.sipData.length) / 2;
+    const pointY = chartY + chartHeight - ((item.target / 50) / maxValue) * chartHeight;
+    
+    if (index > 0) {
+      pdf.line(prevX, prevY, pointX, pointY);
+    }
+    
+    // Draw point
+    pdf.setFillColor(239, 68, 68);
+    pdf.circle(pointX, pointY, 1, 'F');
+    
+    prevX = pointX;
+    prevY = pointY;
+  });
+  
+  yPosition += chartHeight + 25;
+  
+  // Draw Monthly MIS Chart
+  if (yPosition > pageHeight - 80) {
     pdf.addPage();
     yPosition = 20;
   }
   
   pdf.setFontSize(12);
-  pdf.text('SIP Business Data', 14, yPosition);
-  yPosition += 5;
+  pdf.setTextColor(0, 0, 0);
+  pdf.text('MONTHLY MIS', 14, yPosition);
+  yPosition += 15;
   
-  const sipTableData = [
-    ['Month', 'Amount (Lakh)', 'Target'],
-    ...dashboardData.sipData.map(item => [item.month, item.amount.toString(), item.target.toString()])
-  ];
+  // Chart dimensions for MIS
+  const misChartY = yPosition;
+  const misChartHeight = 60;
   
-  autoTable(pdf, {
-    startY: yPosition + 5,
-    head: [sipTableData[0]],
-    body: sipTableData.slice(1),
-    theme: 'grid',
-    headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255] },
-    styles: { halign: 'center' },
-  });
-  
-  // Add Monthly MIS data as table
-  yPosition = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : yPosition + 30) + 15;
-  
-  if (yPosition > pageHeight - 60) {
-    pdf.addPage();
-    yPosition = 20;
+  // Draw grid for MIS
+  pdf.setDrawColor(200, 200, 200);
+  pdf.setLineWidth(0.1);
+  for (let i = 0; i <= 4; i++) {
+    const y = misChartY + (misChartHeight / 4) * i;
+    pdf.line(chartX, y, chartX + chartWidth, y);
   }
   
-  pdf.setFontSize(12);
-  pdf.text('Monthly MIS Data', 14, yPosition);
-  yPosition += 5;
+  // Find max value for MIS
+  const misMaxValue = Math.max(...dashboardData.monthlyMisData.map(d => d.series1 + d.series2 + d.series3));
   
-  const misTableData = [
-    ['Month', 'Series 1', 'Series 2', 'Series 3'],
-    ...dashboardData.monthlyMisData.map(item => [
-      item.month, 
-      item.series1.toString(), 
-      item.series2.toString(), 
-      item.series3.toString()
-    ])
+  // Draw stacked areas
+  const colors = [
+    [239, 68, 68],   // Red for series1
+    [34, 197, 94],   // Green for series2
+    [59, 130, 246]   // Blue for series3
   ];
   
-  autoTable(pdf, {
-    startY: yPosition + 5,
-    head: [misTableData[0]],
-    body: misTableData.slice(1),
-    theme: 'grid',
-    headStyles: { fillColor: [239, 68, 68], textColor: [255, 255, 255] },
-    styles: { halign: 'center' },
+  dashboardData.monthlyMisData.forEach((item, index) => {
+    const barX = chartX + (chartWidth / dashboardData.monthlyMisData.length) * index;
+    const barWidth = chartWidth / dashboardData.monthlyMisData.length;
+    
+    let cumulativeHeight = 0;
+    
+    // Draw each series as a stacked bar
+    ['series1', 'series2', 'series3'].forEach((series, seriesIndex) => {
+      const value = item[series];
+      const segmentHeight = (value / misMaxValue) * misChartHeight;
+      const segmentY = misChartY + misChartHeight - cumulativeHeight - segmentHeight;
+      
+      pdf.setFillColor(colors[seriesIndex][0], colors[seriesIndex][1], colors[seriesIndex][2]);
+      pdf.rect(barX, segmentY, barWidth, segmentHeight, 'F');
+      
+      cumulativeHeight += segmentHeight;
+    });
+    
+    // Add month label
+    pdf.setFontSize(8);
+    pdf.setTextColor(0, 0, 0);
+    pdf.text(item.month, barX + barWidth / 2, misChartY + misChartHeight + 8, { align: 'center' });
   });
+  
+  yPosition += misChartHeight + 20;
   
   // Add footer
-  const finalY = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : yPosition + 30);
-  if (finalY < pageHeight - 20) {
-    pdf.setFontSize(8);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text('Generated by WealthElite Dashboard', pageWidth / 2, pageHeight - 10, { align: 'center' });
-  }
+  pdf.setFontSize(8);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text('Generated by WealthElite Dashboard', pageWidth / 2, pageHeight - 10, { align: 'center' });
   
   // Save the PDF
   pdf.save('wealth-dashboard-report.pdf');
