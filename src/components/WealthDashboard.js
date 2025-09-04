@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -7,26 +6,31 @@ import {
   MapPin,
   Settings,
   Bell,
-  Star,
-  Users,
-  Search,
-  Lock,
-  LogOut,
+  User,
   ChevronDown,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
   TrendingUp,
   TrendingDown,
+  Share2,
   BarChart3,
   PieChart,
   ArrowUp,
   Sun,
   Moon,
+  Search,
+  Star,
+  Users,
+  Lock,
+  LogOut,
   ShoppingBag,
   ArrowDownCircle,
   RefreshCw,
   XCircle,
   Plus,
-  Menu,
-  X,
+  FileText,
   FileDown
 } from 'lucide-react';
 import { 
@@ -47,7 +51,7 @@ import {
 } from 'recharts';
 
 import { makeDashboardPdf, prepareDashboardData } from '../lib/pdf/makeReport';
-import { saveOrSharePdf, saveOnlyPdf } from '../lib/mobile/saveSharePdf';
+import { saveOrSharePdf, saveOnlyPdf, shareOnlyPdf } from '../lib/mobile/saveSharePdf';
 import { isNative } from '../utils/platform';
 
 const WealthDashboard = () => {
@@ -58,6 +62,7 @@ const WealthDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [sharingPdf, setSharingPdf] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [isNativePlatform, setIsNativePlatform] = useState(false);
@@ -183,6 +188,39 @@ const WealthDashboard = () => {
     }
   };
 
+  const handleShareOnlyPdf = async () => {
+    setSharingPdf(true);
+    
+    try {
+      // Prepare dashboard data for PDF
+      const dashboardData = prepareDashboardData();
+      
+      // Prepare chart refs
+      const chartRefs = {
+        'Clients Chart': clientsChartRef,
+        'SIP Business Chart': sipChartRef,
+        'Monthly MIS Chart': monthlyMisChartRef
+      };
+      
+      // Generate PDF and share without permanent storage
+      const { base64 } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+      const shareResult = await shareOnlyPdf(base64);
+      
+      if (shareResult.success) {
+        setToastMessage(shareResult.message);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      } else {
+        alert(shareResult.message);
+      }
+    } catch (error) {
+      console.error('PDF share error:', error);
+      alert('Failed to share PDF. Please try again.');
+    } finally {
+      setSharingPdf(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
@@ -230,25 +268,47 @@ const WealthDashboard = () => {
         {/* Right Side Icons */}
         <div className="flex items-center space-x-2 sm:space-x-4">
           {/* PDF Download Button */}
-          <button 
-            onClick={handleDownloadPDF}
-            disabled={generatingPdf}
-            className={`flex items-center space-x-1 px-2 py-1 rounded-md transition-colors duration-200 ${
-              darkMode 
-                ? 'bg-gray-700 hover:bg-gray-600 text-white' 
-                : 'bg-red-50 hover:bg-red-100 text-red-600'
-            } ${generatingPdf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-          >
-            <FileDown className="w-4 h-4" />
-            <span className="text-xs hidden sm:inline">
-              {generatingPdf 
-                ? 'Generating...' 
-                : isNativePlatform 
-                  ? 'Save/Share PDF' 
-                  : 'Download PDF'
-              }
-            </span>
-          </button>
+            <button
+              onClick={handleSavePdf}
+              disabled={generatingPdf}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded text-xs sm:text-sm font-medium transition-all duration-200 ${
+                generatingPdf
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : darkMode
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-red-500 hover:bg-red-600 text-white'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span className="hidden sm:inline">
+                {generatingPdf 
+                  ? 'Generating...' 
+                  : isNativePlatform 
+                    ? 'Save/Share PDF' 
+                    : 'Download PDF'
+                }
+              </span>
+            </button>
+
+            {/* Share PDF Only Button - Native platforms only */}
+            {isNativePlatform && (
+              <button
+                onClick={handleShareOnlyPdf}
+                disabled={sharingPdf || generatingPdf}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded text-xs sm:text-sm font-medium transition-all duration-200 ${
+                  sharingPdf || generatingPdf
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : darkMode
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden sm:inline">
+                  {sharingPdf ? 'Sharing...' : 'Share PDF Only'}
+                </span>
+              </button>
+            )}
           {/* Hide some icons on small screens */}
           <div className="hidden md:flex items-center space-x-4">
             <Filter className={`w-5 h-5 cursor-pointer transition-colors duration-300 ${

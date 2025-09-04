@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 export interface SaveShareResult {
@@ -32,11 +32,23 @@ export async function saveOnlyPdf(base64: string, filename: string = 'wealth-das
   }
 
   try {
+    console.log('Starting PDF save process...');
     const platform = Capacitor.getPlatform();
-    const directory = platform === 'ios' ? Directory.Documents : Directory.Data;
+    console.log('Platform detected:', platform);
+    
+    // Use Documents directory for both iOS and Android for better compatibility
+    const directory = Directory.Documents;
     const filePath = `WealthElite/${filename}`;
     
-    // Write the file to the device
+    console.log('Attempting to write file to:', filePath, 'in directory:', directory);
+    console.log('Base64 data length:', base64.length);
+    
+    // Validate base64 data
+    if (!base64 || base64.length === 0) {
+      throw new Error('Invalid base64 data: empty or null');
+    }
+    
+    // Write the file to the device (base64 data is handled automatically)
     const writeResult = await Filesystem.writeFile({
       path: filePath,
       data: base64,
@@ -53,11 +65,16 @@ export async function saveOnlyPdf(base64: string, filename: string = 'wealth-das
         directory: directory
       });
       console.log('File verified - size:', stat.size, 'bytes');
+      
+      if (stat.size === 0) {
+        throw new Error('File was created but has zero size');
+      }
     } catch (statError) {
-      console.warn('Could not verify file stats:', statError);
+      console.error('File verification failed:', statError);
+      throw new Error(`File verification failed: ${statError.message}`);
     }
     
-    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android App Data';
+    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android Documents';
     
     return {
       uriOrUrl: '',
@@ -66,11 +83,158 @@ export async function saveOnlyPdf(base64: string, filename: string = 'wealth-das
     };
     
   } catch (error) {
-    console.error('Save only error:', error);
+    console.error('Save only error - Full details:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    
+    let errorMessage = 'Failed to save PDF to device';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('permission') || error.message.includes('Permission')) {
+        errorMessage = 'Permission denied. Please allow file access in app settings.';
+      } else if (error.message.includes('space') || error.message.includes('storage') || error.message.includes('Storage')) {
+        errorMessage = 'Insufficient storage space. Please free up some space and try again.';
+      } else if (error.message.includes('directory') || error.message.includes('path') || error.message.includes('Directory')) {
+        errorMessage = 'Could not access storage directory. Please try again.';
+      } else if (error.message.includes('base64') || error.message.includes('encoding')) {
+        errorMessage = 'Invalid PDF data format. Please try generating the PDF again.';
+      } else {
+        errorMessage = `Save failed: ${error.message}`;
+      }
+    }
+    
     return {
       uriOrUrl: '',
       success: false,
-      message: `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: errorMessage
+    };
+  }
+}
+
+/**
+ * Share PDF only without permanent storage - creates temporary file for sharing
+ */
+export async function shareOnlyPdf(base64: string, filename: string = 'wealth-dashboard-report.pdf'): Promise<SaveShareResult> {
+  if (!Capacitor.isNativePlatform()) {
+    // Fallback to regular web download for non-native platforms
+    return await handleWebFallback(base64, filename);
+  }
+
+  try {
+    console.log('Starting PDF share-only process...');
+    const platform = Capacitor.getPlatform();
+    console.log('Platform detected:', platform);
+    
+    const directory = Directory.Cache; // Use cache directory for temporary files
+    const tempFilePath = `temp_${Date.now()}_${filename}`;
+    
+    console.log('Creating temporary file:', tempFilePath);
+    console.log('Base64 data length:', base64.length);
+    
+    // Validate base64 data
+    if (!base64 || base64.length === 0) {
+      throw new Error('Invalid base64 data: empty or null');
+    }
+    
+    // Write temporary file (base64 data is handled automatically)
+    const writeResult = await Filesystem.writeFile({
+      path: tempFilePath,
+      data: base64,
+      directory: directory,
+      recursive: true
+    });
+    
+    console.log('Temporary file created for sharing:', writeResult);
+    
+    // Get the URI of the temporary file
+    const uriResult = await Filesystem.getUri({
+      directory: directory,
+      path: tempFilePath
+    });
+    
+    console.log('Temporary file URI obtained:', uriResult.uri);
+    
+    // Validate URI format before sharing
+    if (!uriResult.uri || (!uriResult.uri.startsWith('file://') && !uriResult.uri.startsWith('content://'))) {
+      console.error('Invalid URI format:', uriResult.uri);
+      throw new Error(`Invalid file URI format: ${uriResult.uri}`);
+    }
+    
+    try {
+      // Share the temporary file
+      await Share.share({
+        title: 'WealthElite Dashboard Report',
+        text: 'Your wealth dashboard report is ready to view',
+        url: uriResult.uri,
+        dialogTitle: 'Share Dashboard Report'
+      });
+      
+      // Clean up temporary file after sharing (with delay to ensure sharing completes)
+      setTimeout(async () => {
+        try {
+          await Filesystem.deleteFile({
+            path: tempFilePath,
+            directory: directory
+          });
+          console.log('Temporary file cleaned up:', tempFilePath);
+        } catch (cleanupError) {
+          console.warn('Failed to cleanup temporary file:', cleanupError);
+        }
+      }, 5000); // 5 second delay
+      
+      return {
+        uriOrUrl: uriResult.uri,
+        success: true,
+        message: 'PDF shared successfully (temporary file)'
+      };
+      
+    } catch (shareError) {
+      console.error('Share error details:', shareError);
+      
+      // Clean up temporary file if sharing fails
+      try {
+        await Filesystem.deleteFile({
+          path: tempFilePath,
+          directory: directory
+        });
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup temporary file after share error:', cleanupError);
+      }
+      
+      if (shareError.message && shareError.message.includes('cancelled')) {
+        return {
+          uriOrUrl: '',
+          success: false,
+          message: 'Sharing was cancelled by user'
+        };
+      }
+      
+      throw shareError;
+    }
+    
+  } catch (error) {
+    console.error('Share only error - Full details:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    
+    let errorMessage = 'Failed to share PDF';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('permission') || error.message.includes('Permission')) {
+        errorMessage = 'Permission denied. Please allow file access in app settings.';
+      } else if (error.message.includes('URI') || error.message.includes('uri')) {
+        errorMessage = 'File sharing failed due to invalid file path. Please try again.';
+      } else if (error.message.includes('base64') || error.message.includes('encoding')) {
+        errorMessage = 'Invalid PDF data format. Please try generating the PDF again.';
+      } else {
+        errorMessage = `Share failed: ${error.message}`;
+      }
+    }
+    
+    return {
+      uriOrUrl: '',
+      success: false,
+      message: errorMessage
     };
   }
 }
@@ -80,15 +244,25 @@ export async function saveOnlyPdf(base64: string, filename: string = 'wealth-das
  */
 async function handleNativeSaveShare(base64: string, filename: string): Promise<SaveShareResult> {
   try {
-    // Determine the appropriate directory based on platform
+    console.log('Starting native save/share process...');
     const platform = Capacitor.getPlatform();
-    // Use Data directory for Android (more reliable on emulators) and Documents for iOS
-    const directory = platform === 'ios' ? Directory.Documents : Directory.Data;
+    console.log('Platform detected:', platform);
+    
+    // Use Documents directory for both iOS and Android for better compatibility
+    const directory = Directory.Documents;
     
     // Create the file path with WealthElite folder
     const filePath = `WealthElite/${filename}`;
     
-    // Write the file to the device
+    console.log('Attempting to write file to:', filePath, 'in directory:', directory);
+    console.log('Base64 data length:', base64.length);
+    
+    // Validate base64 data
+    if (!base64 || base64.length === 0) {
+      throw new Error('Invalid base64 data: empty or null');
+    }
+    
+    // Write the file to the device (base64 data is handled automatically)
     const writeResult = await Filesystem.writeFile({
       path: filePath,
       data: base64,
@@ -105,8 +279,13 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
         directory: directory
       });
       console.log('File verified - size:', stat.size, 'bytes');
+      
+      if (stat.size === 0) {
+        throw new Error('File was created but has zero size');
+      }
     } catch (statError) {
-      console.warn('Could not verify file stats:', statError);
+      console.error('File verification failed:', statError);
+      throw new Error(`File verification failed: ${statError.message}`);
     }
     
     // Get the URI of the written file
@@ -116,6 +295,12 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     });
     
     console.log('File URI obtained:', uriResult.uri);
+    
+    // Validate URI format before sharing
+    if (!uriResult.uri || (!uriResult.uri.startsWith('file://') && !uriResult.uri.startsWith('content://'))) {
+      console.error('Invalid URI format:', uriResult.uri);
+      throw new Error(`Invalid file URI format: ${uriResult.uri}`);
+    }
     
     // Try to share the file, but handle cancellation gracefully
     let shareSuccess = true;
@@ -131,13 +316,11 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     } catch (error) {
       shareSuccess = false;
       shareError = error;
-      console.log('Share error:', error);
+      console.error('Share error details:', error);
     }
     
-    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android App Data';
-    const locationPath = platform === 'ios' 
-      ? 'Documents/WealthElite/' 
-      : 'App Data/WealthElite/';
+    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android Documents';
+    const locationPath = 'Documents/WealthElite/';
     
     // Determine success message based on share result
     let message: string;
@@ -146,7 +329,7 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     } else if (shareError && shareError.message && shareError.message.includes('cancelled')) {
       message = `PDF saved to ${locationPath} successfully. Sharing was cancelled by user.`;
     } else {
-      message = `PDF saved to ${locationPath} successfully. Sharing failed - you can find the file in your app's data folder.`;
+      message = `PDF saved to ${locationPath} successfully. Sharing failed - you can find the file in your documents folder.`;
     }
     
     return {
@@ -156,18 +339,24 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     };
     
   } catch (error) {
-    console.error('Native save/share error:', error);
+    console.error('Native save/share error - Full details:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
     
     // Provide more specific error messages
     let errorMessage = 'Failed to save PDF to device';
     
     if (error instanceof Error) {
-      if (error.message.includes('permission')) {
+      if (error.message.includes('permission') || error.message.includes('Permission')) {
         errorMessage = 'Permission denied. Please allow file access in app settings.';
-      } else if (error.message.includes('space') || error.message.includes('storage')) {
+      } else if (error.message.includes('space') || error.message.includes('storage') || error.message.includes('Storage')) {
         errorMessage = 'Insufficient storage space. Please free up some space and try again.';
-      } else if (error.message.includes('directory') || error.message.includes('path')) {
+      } else if (error.message.includes('directory') || error.message.includes('path') || error.message.includes('Directory')) {
         errorMessage = 'Could not access storage directory. Please try again.';
+      } else if (error.message.includes('URI') || error.message.includes('uri')) {
+        errorMessage = 'File saving failed due to invalid file path. Please try again.';
+      } else if (error.message.includes('base64') || error.message.includes('encoding')) {
+        errorMessage = 'Invalid PDF data format. Please try generating the PDF again.';
       } else {
         errorMessage = `Save failed: ${error.message}`;
       }
