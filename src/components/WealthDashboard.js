@@ -46,7 +46,9 @@ import {
   ComposedChart
 } from 'recharts';
 
-import { makeDashboardPdf, prepareDashboardData, downloadBlob } from '../lib/pdf/makeReport';
+import { makeDashboardPdf, prepareDashboardData } from '../lib/pdf/makeReport';
+import { saveOrSharePdf, getSaveLocationMessage } from '../lib/mobile/saveSharePdf';
+import { Capacitor } from '@capacitor/core';
 
 const WealthDashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -56,6 +58,9 @@ const WealthDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isNativePlatform, setIsNativePlatform] = useState(false);
   
   // Refs for chart components
   const clientsChartRef = useRef(null);
@@ -105,6 +110,10 @@ const WealthDashboard = () => {
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
   };
+
+  useEffect(() => {
+    setIsNativePlatform(Capacitor.isNativePlatform());
+  }, []);
   
   const handleDownloadPDF = async () => {
     setGeneratingPdf(true);
@@ -119,11 +128,36 @@ const WealthDashboard = () => {
         'Monthly MIS Chart': monthlyMisChartRef
       };
       
-      // Generate PDF with darkMode parameter
-      const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
-      
-      // Download the PDF blob
-      downloadBlob(blob, 'wealth-dashboard-report.pdf');
+      if (isNativePlatform) {
+        // Native platform: generate base64 and use save/share
+        const { base64 } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+        const result = await saveOrSharePdf(base64);
+        
+        if (result.success) {
+          setToastMessage(result.message);
+          setShowToast(true);
+          setTimeout(() => setShowToast(false), 5000);
+        } else {
+          alert(result.message);
+        }
+      } else {
+        // Web platform: generate blob and download
+        const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+        
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'wealth-dashboard-report.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        setToastMessage('PDF downloaded to Downloads folder');
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('Failed to generate PDF. Please try again.');
@@ -189,7 +223,14 @@ const WealthDashboard = () => {
             } ${generatingPdf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
             <FileDown className="w-4 h-4" />
-            <span className="text-xs hidden sm:inline">{generatingPdf ? 'Generating...' : 'Download PDF'}</span>
+            <span className="text-xs hidden sm:inline">
+              {generatingPdf 
+                ? 'Generating...' 
+                : isNativePlatform 
+                  ? 'Save/Share PDF' 
+                  : 'Download PDF'
+              }
+            </span>
           </button>
           {/* Hide some icons on small screens */}
           <div className="hidden md:flex items-center space-x-4">
@@ -573,6 +614,41 @@ const WealthDashboard = () => {
           </div>
         </div>
       </div>
+      
+      {/* Success Toast */}
+      {showToast && (
+        <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className={`px-4 py-3 rounded-lg shadow-lg max-w-sm ${
+            darkMode 
+              ? 'bg-gray-800 text-white border border-gray-700' 
+              : 'bg-white text-gray-900 border border-gray-200'
+          }`}>
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Success!</p>
+                <p className={`text-xs mt-1 ${
+                  darkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>
+                  {toastMessage}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowToast(false)}
+                className={`flex-shrink-0 ${
+                  darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
+                } transition-colors duration-200`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
