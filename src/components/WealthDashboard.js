@@ -53,6 +53,7 @@ import {
 import { makeDashboardPdf, prepareDashboardData } from '../lib/pdf/makeReport';
 import { saveOrSharePdf, saveOnlyPdf, shareOnlyPdf } from '../lib/mobile/saveSharePdf';
 import { isNative } from '../utils/platform';
+import { Capacitor } from '@capacitor/core';
 
 const WealthDashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -117,7 +118,7 @@ const WealthDashboard = () => {
   };
 
   useEffect(() => {
-    setIsNativePlatform(Capacitor.isNativePlatform());
+    setIsNativePlatform(isNative());
   }, []);
   
   const handleSavePdf = async () => {
@@ -125,7 +126,7 @@ const WealthDashboard = () => {
     
     try {
       // Prepare dashboard data for PDF
-      const dashboardData = prepareDashboardData();
+      const dashboardData = prepareDashboardData(sipData, monthlyMisData, clientsData);
       
       // Prepare chart refs
       const chartRefs = {
@@ -134,51 +135,18 @@ const WealthDashboard = () => {
         'Monthly MIS Chart': monthlyMisChartRef
       };
       
-      if (isNative()) {
-        // Native platform (iOS/Android): use Capacitor file system and sharing
-        const { base64 } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
-        
-        // First try save-only approach to avoid share cancellation issues
-        const saveResult = await saveOnlyPdf(base64);
-        
-        if (saveResult.success) {
-          setToastMessage(saveResult.message + ' Tap to share if needed.');
-          setShowToast(true);
-          setTimeout(() => setShowToast(false), 5000);
-          
-          // Optional: Try to share after successful save
-          try {
-            const shareResult = await saveOrSharePdf(base64);
-            // Don't override success message if share fails
-          } catch (shareError) {
-            console.log('Share failed but file was saved:', shareError);
-          }
-        } else {
-          alert(saveResult.message);
-        }
-      } else {
-        // Web platform (browser/Next.js dev): use traditional download
-        const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
-        
-        // Create download link
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'wealth-dashboard-report.pdf';
-        link.style.display = 'none';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        // Clean up the object URL
-        setTimeout(() => {
-          URL.revokeObjectURL(url);
-        }, 1000);
-        
-        setToastMessage('PDF downloaded successfully to your Downloads folder');
+      // Generate PDF blob
+      const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+      
+      // Use our cross-platform save/share function
+      const result = await saveOrSharePdf(blob);
+      
+      if (result.success) {
+        setToastMessage(result.message);
         setShowToast(true);
-        setTimeout(() => setShowToast(false), 3000);
+        setTimeout(() => setShowToast(false), 5000);
+      } else {
+        alert(result.message);
       }
     } catch (error) {
       console.error('PDF generation error:', error);
@@ -193,7 +161,7 @@ const WealthDashboard = () => {
     
     try {
       // Prepare dashboard data for PDF
-      const dashboardData = prepareDashboardData();
+      const dashboardData = prepareDashboardData(sipData, monthlyMisData, clientsData);
       
       // Prepare chart refs
       const chartRefs = {
@@ -203,8 +171,8 @@ const WealthDashboard = () => {
       };
       
       // Generate PDF and share without permanent storage
-      const { base64 } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
-      const shareResult = await shareOnlyPdf(base64);
+      const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+      const shareResult = await shareOnlyPdf(blob);
       
       if (shareResult.success) {
         setToastMessage(shareResult.message);

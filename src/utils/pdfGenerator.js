@@ -1,190 +1,4 @@
-// import { jsPDF } from 'jspdf';
-// import autoTable from 'jspdf-autotable';
-// import html2canvas from 'html2canvas';
 
-// /**
-//  * Generates a PDF with dashboard statistics and charts
-//  * @param {Object} dashboardData - Data from the dashboard
-//  * @param {Object} chartRefs - References to chart components
-//  * @param {boolean} darkMode - Whether dark mode is enabled
-//  */
-// export const generateDashboardPDF = async (dashboardData, chartRefs, darkMode = false) => {
-//   // Create a new PDF document
-//   const pdf = new jsPDF('p', 'mm', 'a4');
-//   const pageWidth = pdf.internal.pageSize.getWidth();
-//   const pageHeight = pdf.internal.pageSize.getHeight();
-  
-//   // Add title
-//   pdf.setFontSize(20);
-//   pdf.setTextColor(0, 0, 0);
-//   pdf.text('Wealth Dashboard Report', pageWidth / 2, 15, { align: 'center' });
-  
-//   // Add date
-//   pdf.setFontSize(10);
-//   pdf.setTextColor(100, 100, 100);
-//   pdf.text(`Generated on: ${new Date().toLocaleDateString()}`, pageWidth / 2, 22, { align: 'center' });
-  
-//   // Add AUM and SIP stats
-//   pdf.setFontSize(14);
-//   pdf.setTextColor(0, 0, 0);
-//   pdf.text('Key Statistics', 14, 35);
-  
-//   // Create a table for key stats
-//   const statsData = [
-//     ['Metric', 'Value', 'Change'],
-//     ['AUM', `${dashboardData.aum} Cr`, `${dashboardData.aumChange}% MoM`],
-//     ['SIP', `${dashboardData.sip} Lakh`, `${dashboardData.sipChange}% MoM`],
-//   ];
-  
-//   autoTable(pdf, {
-//     startY: 40,
-//     head: [statsData[0]],
-//     body: statsData.slice(1),
-//     theme: 'grid',
-//     headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255] },
-//     styles: { halign: 'center' },
-//     columnStyles: {
-//       0: { cellWidth: 40 },
-//       1: { cellWidth: 40 },
-//       2: { cellWidth: 40 }
-//     }
-//   });
-  
-//   // Add transaction stats
-//   pdf.setFontSize(14);
-//   const statsTableHeight = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 40);
-//   pdf.text('Transaction Statistics', 14, statsTableHeight + 15);
-  
-//   const transactionData = [
-//     ['Type', 'Count', 'Amount'],
-//     ['Purchases', dashboardData.purchases.value, dashboardData.purchases.amount],
-//     ['Redemptions', dashboardData.redemptions.value, dashboardData.redemptions.amount],
-//     ['Reg Transactions', dashboardData.regTransactions.value, dashboardData.regTransactions.amount],
-//     ['SIP Rejections', dashboardData.sipRejections.value, dashboardData.sipRejections.amount],
-//     ['New SIP', dashboardData.newSip.value, dashboardData.newSip.amount],
-//   ];
-  
-//   autoTable(pdf, {
-//     startY: statsTableHeight + 20,
-//     head: [transactionData[0]],
-//     body: transactionData.slice(1),
-//     theme: 'grid',
-//     headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255] },
-//     styles: { halign: 'center' },
-//   });
-  
-//   // Add client statistics
-//   pdf.setFontSize(14);
-//   const transactionTableHeight = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : statsTableHeight + 40);
-//   pdf.text('Client Statistics', 14, transactionTableHeight + 15);
-  
-//   const clientData = [
-//     ['Type', 'Count'],
-//     ['Active', dashboardData.clients.active],
-//     ['Inactive', dashboardData.clients.inactive],
-//     ['New', dashboardData.clients.new],
-//     ['Online', dashboardData.clients.online],
-//   ];
-  
-//   autoTable(pdf, {
-//     startY: transactionTableHeight + 20,
-//     head: [clientData[0]],
-//     body: clientData.slice(1),
-//     theme: 'grid',
-//     headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255] },
-//     styles: { halign: 'center' },
-//   });
-  
-//   // Add charts
-//   let yPosition = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : transactionTableHeight + 40) + 15;
-  
-//   // Check if we need to add a new page for charts
-//   if (yPosition > pageHeight - 100) {
-//     pdf.addPage();
-//     yPosition = 20;
-//   }
-  
-//   pdf.setFontSize(14);
-//   pdf.text('Charts', 14, yPosition);
-//   yPosition += 10;
-  
-//   // Add charts from refs if available
-//   if (chartRefs && Object.keys(chartRefs).length > 0) {
-//     for (const [chartName, chartRef] of Object.entries(chartRefs)) {
-//       if (chartRef && chartRef.current) {
-//         try {
-//           // Convert chart to canvas
-//           const canvas = await html2canvas(chartRef.current, {
-//             scale: 2,
-//             logging: false,
-//             useCORS: true,
-//             allowTaint: true,
-//             foreignObjectRendering: false,
-//             backgroundColor: darkMode ? '#1f2937' : '#ffffff'
-//           });
-          
-//           // Check if we need to add a new page
-//           if (yPosition > pageHeight - 80) {
-//             pdf.addPage();
-//             yPosition = 20;
-//           }
-          
-//           // Add chart title
-//           pdf.setFontSize(12);
-//           pdf.text(chartName, 14, yPosition);
-//           yPosition += 5;
-          
-//           // Add chart image
-//           const imgData = canvas.toDataURL('image/png');
-//           const imgWidth = pageWidth - 28; // Margins on both sides
-//           const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          
-//           pdf.addImage(imgData, 'PNG', 14, yPosition, imgWidth, imgHeight);
-//           yPosition += imgHeight + 15;
-//         } catch (error) {
-//           console.error(`Error adding chart ${chartName}:`, error);
-//         }
-//       }
-//     }
-//   } else {
-//     // If no chart refs are provided, add placeholder text
-//     pdf.setFontSize(12);
-//     pdf.text('No charts available', 14, yPosition + 10);
-//   }
-  
-//   // Save the PDF
-//   pdf.save('wealth-dashboard-report.pdf');
-// };
-
-// /**
-//  * Prepares dashboard data for PDF generation
-//  * @param {Object} sipData - SIP chart data
-//  * @param {Object} monthlyMisData - Monthly MIS chart data
-//  * @param {Object} clientsData - Clients data
-//  * @returns {Object} Formatted dashboard data
-//  */
-// export const prepareDashboardData = (sipData, monthlyMisData, clientsData) => {
-//   return {
-//     aum: '12.19',
-//     aumChange: '+0.77',
-//     sip: '1.39',
-//     sipChange: '+0',
-//     purchases: { value: 0, amount: '0.00 INR' },
-//     redemptions: { value: 0, amount: '0.00 INR' },
-//     regTransactions: { value: 0, amount: '0.00 INR' },
-//     sipRejections: { value: 0, amount: '0.00 INR' },
-//     newSip: { value: 0, amount: '0.00 INR' },
-//     clients: {
-//       active: clientsData.find(item => item.name === 'Active')?.value || 0,
-//       inactive: clientsData.find(item => item.name === 'InActive')?.value || 0,
-//       new: clientsData.find(item => item.name === 'New')?.value || 0,
-//       online: clientsData.find(item => item.name === 'Online')?.value || 0,
-//     },
-//     sipData,
-//     monthlyMisData,
-//     clientsData
-//   };
-// };
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -195,6 +9,7 @@ import html2canvas from 'html2canvas';
  * @param {Object} dashboardData - Data from the dashboard
  * @param {Object} chartRefs - References to chart components
  * @param {boolean} darkMode - Whether dark mode is enabled
+ * @returns {Promise<Blob>} PDF as a Blob for cross-platform save/share
  */
 export const generateDashboardPDF = async (dashboardData, chartRefs, darkMode = false) => {
   // Create a new PDF document
@@ -514,8 +329,8 @@ export const generateDashboardPDF = async (dashboardData, chartRefs, darkMode = 
   pdf.setTextColor(100, 100, 100);
   pdf.text('Generated by WealthElite Dashboard', pageWidth / 2, pageHeight - 10, { align: 'center' });
   
-  // Save the PDF
-  pdf.save('wealth-dashboard-report.pdf');
+  // Return the PDF as a Blob for cross-platform handling
+  return pdf.output('blob');
 };
 
 /**
