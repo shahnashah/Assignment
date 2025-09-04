@@ -69,6 +69,17 @@ Real-time tracking of financial transactions including:
 - **Statistical tables** with formatted data presentation
 - **Custom styling** that adapts to current theme (dark/light mode)
 
+#### Platform-Specific Behavior
+- **Native Mobile (iOS/Android)**: 
+  - Files saved to device storage using Capacitor Filesystem API
+  - Native share dialog for sharing PDFs with other apps
+  - Graceful handling of share cancellation (file still saved)
+  - Location: iOS Documents/WealthElite/ or Android App Data/WealthElite/
+- **Web Browser/Development**: 
+  - Traditional browser download to Downloads folder
+  - Immediate file download without additional dialogs
+  - Compatible with all modern browsers
+
 #### Report Contents
 1. **Executive Summary** with key statistics
 2. **AUM and SIP Performance** metrics
@@ -81,6 +92,8 @@ Real-time tracking of financial transactions including:
 - Uses `jsPDF` for PDF document creation
 - `html2canvas` for chart image capture
 - `jspdf-autotable` for structured data tables
+- **Capacitor Filesystem & Share** for native mobile functionality
+- **Platform detection utility** (`isNative()`) for graceful fallbacks
 - Supports both light and dark theme exports
 - Optimized file size and quality
 

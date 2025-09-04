@@ -12,26 +12,65 @@ export interface SaveShareResult {
  * Saves and shares a PDF file using native capabilities on mobile or web fallback
  * @param base64 - Base64 encoded PDF data
  * @param filename - Optional filename (defaults to timestamped name)
- * @returns Promise with file URI/URL and status
  */
-export async function saveOrSharePdf(
-  base64: string, 
-  filename?: string
-): Promise<SaveShareResult> {
-  const defaultFilename = filename || `WealthElite-report-${Date.now()}.pdf`;
-  
+export async function saveOrSharePdf(base64: string, filename: string = 'wealth-dashboard-report.pdf'): Promise<SaveShareResult> {
+  // Check if we're on a native platform (iOS/Android)
+  if (Capacitor.isNativePlatform()) {
+    return await handleNativeSaveShare(base64, filename);
+  } else {
+    // Fallback to web download
+    return await handleWebFallback(base64, filename);
+  }
+}
+
+/**
+ * Save PDF without sharing - for cases where sharing is problematic
+ */
+export async function saveOnlyPdf(base64: string, filename: string = 'wealth-dashboard-report.pdf'): Promise<SaveShareResult> {
+  if (!Capacitor.isNativePlatform()) {
+    return await handleWebFallback(base64, filename);
+  }
+
   try {
-    if (Capacitor.isNativePlatform()) {
-      return await handleNativeSaveShare(base64, defaultFilename);
-    } else {
-      return await handleWebFallback(base64, defaultFilename);
+    const platform = Capacitor.getPlatform();
+    const directory = platform === 'ios' ? Directory.Documents : Directory.Data;
+    const filePath = `WealthElite/${filename}`;
+    
+    // Write the file to the device
+    const writeResult = await Filesystem.writeFile({
+      path: filePath,
+      data: base64,
+      directory: directory,
+      recursive: true
+    });
+    
+    console.log('File written successfully:', writeResult);
+    
+    // Verify file was created
+    try {
+      const stat = await Filesystem.stat({
+        path: filePath,
+        directory: directory
+      });
+      console.log('File verified - size:', stat.size, 'bytes');
+    } catch (statError) {
+      console.warn('Could not verify file stats:', statError);
     }
+    
+    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android App Data';
+    
+    return {
+      uriOrUrl: '',
+      success: true,
+      message: `PDF saved successfully to ${platformName}/WealthElite/`
+    };
+    
   } catch (error) {
-    console.error('Error in saveOrSharePdf:', error);
+    console.error('Save only error:', error);
     return {
       uriOrUrl: '',
       success: false,
-      message: `Failed to save/share PDF: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 }
@@ -43,7 +82,8 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
   try {
     // Determine the appropriate directory based on platform
     const platform = Capacitor.getPlatform();
-    const directory = platform === 'ios' ? Directory.Documents : Directory.External;
+    // Use Data directory for Android (more reliable on emulators) and Documents for iOS
+    const directory = platform === 'ios' ? Directory.Documents : Directory.Data;
     
     // Create the file path with WealthElite folder
     const filePath = `WealthElite/${filename}`;
@@ -58,6 +98,17 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     
     console.log('File written successfully:', writeResult);
     
+    // Verify file was created by checking its stats
+    try {
+      const stat = await Filesystem.stat({
+        path: filePath,
+        directory: directory
+      });
+      console.log('File verified - size:', stat.size, 'bytes');
+    } catch (statError) {
+      console.warn('Could not verify file stats:', statError);
+    }
+    
     // Get the URI of the written file
     const uriResult = await Filesystem.getUri({
       directory: directory,
@@ -66,20 +117,42 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
     
     console.log('File URI obtained:', uriResult.uri);
     
-    // Share the file using the native share sheet
-    await Share.share({
-      title: 'WealthElite Dashboard Report',
-      text: 'Your wealth dashboard report is ready to view',
-      url: uriResult.uri,
-      dialogTitle: 'Share Dashboard Report'
-    });
+    // Try to share the file, but handle cancellation gracefully
+    let shareSuccess = true;
+    let shareError = null;
     
-    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android External Storage';
+    try {
+      await Share.share({
+        title: 'WealthElite Dashboard Report',
+        text: 'Your wealth dashboard report is ready to view',
+        url: uriResult.uri,
+        dialogTitle: 'Share Dashboard Report'
+      });
+    } catch (error) {
+      shareSuccess = false;
+      shareError = error;
+      console.log('Share error:', error);
+    }
+    
+    const platformName = platform === 'ios' ? 'iOS Documents' : 'Android App Data';
+    const locationPath = platform === 'ios' 
+      ? 'Documents/WealthElite/' 
+      : 'App Data/WealthElite/';
+    
+    // Determine success message based on share result
+    let message: string;
+    if (shareSuccess) {
+      message = `PDF saved to ${platformName}/WealthElite/ and shared successfully`;
+    } else if (shareError && shareError.message && shareError.message.includes('cancelled')) {
+      message = `PDF saved to ${locationPath} successfully. Sharing was cancelled by user.`;
+    } else {
+      message = `PDF saved to ${locationPath} successfully. Sharing failed - you can find the file in your app's data folder.`;
+    }
     
     return {
       uriOrUrl: uriResult.uri,
       success: true,
-      message: `PDF saved to ${platformName}/WealthElite/ and shared successfully`
+      message: message
     };
     
   } catch (error) {
@@ -93,8 +166,8 @@ async function handleNativeSaveShare(base64: string, filename: string): Promise<
         errorMessage = 'Permission denied. Please allow file access in app settings.';
       } else if (error.message.includes('space') || error.message.includes('storage')) {
         errorMessage = 'Insufficient storage space. Please free up some space and try again.';
-      } else if (error.message.includes('share')) {
-        errorMessage = 'PDF saved successfully but sharing failed. Check the WealthElite folder in your files.';
+      } else if (error.message.includes('directory') || error.message.includes('path')) {
+        errorMessage = 'Could not access storage directory. Please try again.';
       } else {
         errorMessage = `Save failed: ${error.message}`;
       }

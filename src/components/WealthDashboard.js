@@ -47,8 +47,8 @@ import {
 } from 'recharts';
 
 import { makeDashboardPdf, prepareDashboardData } from '../lib/pdf/makeReport';
-import { saveOrSharePdf, getSaveLocationMessage } from '../lib/mobile/saveSharePdf';
-import { Capacitor } from '@capacitor/core';
+import { saveOrSharePdf, saveOnlyPdf } from '../lib/mobile/saveSharePdf';
+import { isNative } from '../utils/platform';
 
 const WealthDashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -115,11 +115,12 @@ const WealthDashboard = () => {
     setIsNativePlatform(Capacitor.isNativePlatform());
   }, []);
   
-  const handleDownloadPDF = async () => {
+  const handleSavePdf = async () => {
     setGeneratingPdf(true);
+    
     try {
-      // Prepare dashboard data
-      const dashboardData = prepareDashboardData(sipData, monthlyMisData, clientsData);
+      // Prepare dashboard data for PDF
+      const dashboardData = prepareDashboardData();
       
       // Prepare chart refs
       const chartRefs = {
@@ -128,20 +129,30 @@ const WealthDashboard = () => {
         'Monthly MIS Chart': monthlyMisChartRef
       };
       
-      if (isNativePlatform) {
-        // Native platform: generate base64 and use save/share
+      if (isNative()) {
+        // Native platform (iOS/Android): use Capacitor file system and sharing
         const { base64 } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
-        const result = await saveOrSharePdf(base64);
         
-        if (result.success) {
-          setToastMessage(result.message);
+        // First try save-only approach to avoid share cancellation issues
+        const saveResult = await saveOnlyPdf(base64);
+        
+        if (saveResult.success) {
+          setToastMessage(saveResult.message + ' Tap to share if needed.');
           setShowToast(true);
           setTimeout(() => setShowToast(false), 5000);
+          
+          // Optional: Try to share after successful save
+          try {
+            const shareResult = await saveOrSharePdf(base64);
+            // Don't override success message if share fails
+          } catch (shareError) {
+            console.log('Share failed but file was saved:', shareError);
+          }
         } else {
-          alert(result.message);
+          alert(saveResult.message);
         }
       } else {
-        // Web platform: generate blob and download
+        // Web platform (browser/Next.js dev): use traditional download
         const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
         
         // Create download link
@@ -149,17 +160,23 @@ const WealthDashboard = () => {
         const link = document.createElement('a');
         link.href = url;
         link.download = 'wealth-dashboard-report.pdf';
+        link.style.display = 'none';
+        
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(url);
         
-        setToastMessage('PDF downloaded to Downloads folder');
+        // Clean up the object URL
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+        
+        setToastMessage('PDF downloaded successfully to your Downloads folder');
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000);
       }
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('PDF generation error:', error);
       alert('Failed to generate PDF. Please try again.');
     } finally {
       setGeneratingPdf(false);
