@@ -46,7 +46,7 @@ import {
   ComposedChart
 } from 'recharts';
 
-import { generateDashboardPDF, prepareDashboardData } from '../utils/pdfGenerator';
+import { makeDashboardPdf, prepareDashboardData, downloadBlob } from '../lib/pdf/makeReport';
 
 const WealthDashboard = () => {
   const [activeDropdown, setActiveDropdown] = useState(null);
@@ -120,9 +120,13 @@ const WealthDashboard = () => {
       };
       
       // Generate PDF with darkMode parameter
-      await generateDashboardPDF(dashboardData, chartRefs, darkMode);
+      const { blob } = await makeDashboardPdf(dashboardData, chartRefs, darkMode);
+      
+      // Download the PDF blob
+      downloadBlob(blob, 'wealth-dashboard-report.pdf');
     } catch (error) {
       console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
     } finally {
       setGeneratingPdf(false);
     }
