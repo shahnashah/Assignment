@@ -198,6 +198,144 @@ Each chart is highly configurable:
 - **Chart types** can be swapped (bar, line, area, pie)
 - **Responsive breakpoints** can be modified
 
+## 📱 Mobile (Capacitor) Build
+
+### Prerequisites
+- **Android Development**:
+  - Android Studio (latest version)
+  - Java Development Kit (JDK 17+)
+  - Android SDK (API level 33+)
+  - Android SDK Build-Tools
+- **iOS Development** (macOS only):
+  - Xcode 14+
+  - iOS SDK
+  - CocoaPods
+  - Valid Apple Developer account for device testing
+
+### Installation & First Run
+
+1. **Install dependencies**:
+```bash
+npm install
+```
+
+2. **Build and run on Android**:
+```bash
+npm run mobile:android
+# This will:
+# - Build the Next.js app for production
+# - Sync files to Android project
+# - Open Android Studio
+```
+
+3. **Build and run on iOS** (macOS only):
+```bash
+npm run mobile:ios
+# This will:
+# - Build the Next.js app for production
+# - Sync files to iOS project
+# - Open Xcode
+```
+
+### PDF Export on Mobile Devices
+
+#### How It Works
+- **Save Operation**: Files are saved directly to device storage using Capacitor Filesystem API
+- **Share Operation**: Native share dialog appears after successful save
+- **Graceful Handling**: If user cancels sharing, file remains saved with success message
+
+#### File Locations
+- **Android**: 
+  - **Emulator**: `/data/data/com.wealthelite.dashboard/files/WealthElite/`
+  - **Real Device**: App's private storage (accessible via file manager)
+- **iOS**: 
+  - **Documents folder**: `Documents/WealthElite/`
+  - Accessible via Files app
+
+#### User Experience
+1. User taps "Save/Share PDF" button
+2. PDF generates and saves to device storage
+3. Native share dialog appears automatically
+4. **If sharing is cancelled**: "PDF saved successfully. Sharing was cancelled by user."
+5. **If sharing succeeds**: "PDF saved and shared successfully"
+
+### Troubleshooting
+
+#### Common Issues & Solutions
+
+**1. Routing Issues**
+```javascript
+// next.config.mjs - Ensure trailingSlash is enabled
+const nextConfig = {
+  trailingSlash: true,
+  // other config...
+};
+```
+
+**2. Image Optimization Issues**
+```javascript
+// next.config.mjs - Disable image optimization for mobile
+const nextConfig = {
+  images: {
+    unoptimized: true
+  },
+  // other config...
+};
+```
+
+**3. Changes Not Reflecting**
+```bash
+# Always sync after web changes
+npx cap sync android
+npx cap sync ios
+```
+
+**4. Android Build Errors**
+- Ensure Java 17+ is installed and set as JAVA_HOME
+- Update Android SDK and build tools
+- Clean and rebuild: `./gradlew clean` in `android/` folder
+
+**5. iOS Build Errors**
+- Run `pod install` in `ios/App/` folder
+- Ensure Xcode command line tools are installed
+- Check iOS deployment target compatibility
+
+**6. PDF Generation Issues**
+- Check browser console for errors
+- Verify chart refs are properly initialized
+- Ensure sufficient device storage space
+
+### Available Scripts
+
+```bash
+# Development
+npm run dev                 # Start Next.js development server
+npm run build              # Build for production
+npm run start              # Start production server
+
+# Mobile Development
+npm run mobile:android     # Build and open Android Studio
+npm run mobile:ios         # Build and open Xcode (macOS only)
+npm run mobile:sync        # Sync web changes to mobile projects
+
+# Capacitor Commands
+npx cap add android        # Add Android platform
+npx cap add ios           # Add iOS platform
+npx cap sync              # Sync web assets to native projects
+npx cap open android      # Open Android Studio
+npx cap open ios          # Open Xcode
+npx cap run android       # Build and run on Android device/emulator
+npx cap run ios           # Build and run on iOS device/simulator
+```
+
+### Development Workflow
+
+1. **Make changes** to web code (`src/` folder)
+2. **Test in browser** with `npm run dev`
+3. **Sync to mobile** with `npm run mobile:sync`
+4. **Test on device/emulator** via Android Studio/Xcode
+5. **Repeat** as needed
+
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
